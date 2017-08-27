@@ -54,7 +54,7 @@ class Search:
 			node = self.agenda.pop(0)
 			self.visited += [node]
 			if node == self.goal:
-				return self.backtrack()
+				return self.backtrace(self.goal)
 			connected_nodes = self.graph.get_connected_nodes(node)
 			if connected_nodes is not None:
 				self.add_to_agenda(node, connected_nodes)
@@ -73,10 +73,10 @@ class Search:
 			validated = False
 		return validated
 
-	def backtrack(self):
-		"""Backtracks from an end to a start given a dictionary of
+	def backtrace(self, goal_node):
+		"""backtraces from an end to a start given a dictionary of
 		nodes as keys with their parents as values."""
-		path = [self.goal]
+		path = [goal_node]
 		while path[-1] != self.start:
 			path.append(self.parent[path[-1]])
 		path.reverse()
@@ -122,24 +122,25 @@ class HillClimbing(Search):
 				ordered_nodes.append(ordered.node)
 			self.agenda = ordered_nodes + self.agenda
 
-class BeamSearch(Search):
-	def __init__(self, graph, start, goal, beam_width):
+class LayerBasedSearch(Search):
+	"""Layer-based searches are those that depend upon fitlering
+	of a certain layer of our agenda before going throught he next
+	pop in the agenda. The filtering is done based on heuristics or edges."""
+
+	def __init__(self, graph, start, goal):
 		Search.__init__(self, graph, start, goal)
-		self.beam_width = beam_width
 		self.layer_by_node = dict()
 		self.nodes_by_layer = dict()
 		self.is_filtered_by_layer = dict()
-		print('graph : ' + str(graph))
-		print('beam width : ' + str(beam_width))
+
 
 	def search(self):
 		while len(self.agenda) > 0:
 			self.filter_agenda()
-			print('agenda after filter : ' + str(self.agenda))
 			node = self.agenda.pop(0)
 			self.visited += [node]
 			if node == self.goal:
-				return self.backtrack()
+				return self.backtrace(self.goal)
 			connected_nodes = self.graph.get_connected_nodes(node)
 			if connected_nodes is not None:
 				self.add_to_agenda(node, connected_nodes)
@@ -160,6 +161,18 @@ class BeamSearch(Search):
 				self.nodes_by_layer[self.layer_by_node[connected_node]].append(connected_node)
 		if nodes_to_add:
 			self.agenda += nodes_to_add
+
+	def filter_agenda(self):
+		"""Empty function that should be implemented for searchs
+		that must filter agenda before popping the first element."""
+
+class BeamSearch(LayerBasedSearch):
+	def __init__(self, graph, start, goal, beam_width):
+		Search.__init__(self, graph, start, goal)
+		self.beam_width = beam_width
+		self.layer_by_node = dict()
+		self.nodes_by_layer = dict()
+		self.is_filtered_by_layer = dict()
 
 	def filter_agenda(self):
 		node_to_pop = self.agenda[0]
@@ -183,11 +196,40 @@ class BeamSearch(Search):
 					self.agenda = ordered_nodes + self.agenda # reinsert ordered layer
 				self.is_filtered_by_layer[current_layer] = True
 
+class BranchAndBound(LayerBasedSearch):
+
+	def filter_agenda(self):
+		"""Run a for on each path by backtraceing on each element in the current
+		layer with the shortest edge path first."""
+		node_to_pop = self.agenda[0]
+		if self.layer_by_node.has_key(node_to_pop):
+			current_layer = self.layer_by_node[node_to_pop]
+			if not self.is_filtered_by_layer.has_key(current_layer):
+				unordered_node_edges = []
+				for node in self.agenda:
+					if node in self.nodes_by_layer[current_layer]:
+						edge_lengths = path_length(self.graph, self.backtrace(node))
+						node_edge = NodeEdge(node, edge_lengths)
+						unordered_node_edges.append(node_edge)
+				end_of_reorder = len(unordered_node_edges)
+				if end_of_reorder > 0:
+					self.agenda = self.agenda[end_of_reorder:]
+					ordered_node_edges = sorted(unordered_node_edges, key=lambda x: x.edges_length)
+					ordered_nodes = []
+					for index, value in enumerate(ordered_node_edges):
+						ordered_nodes.append(value.node)
+					self.agenda = ordered_nodes + self.agenda
+				self.is_filtered_by_layer[current_layer] = True
+
 class NodeHeuristic:
 	def __init__(self, node, heuristic):
 		self.node = node
 		self.heuristic = heuristic
 
+class NodeEdge:
+	def __init__(self, node, edges_length):
+		self.node = node
+		self.edges_length = edges_length
 
 def bfs(graph, start, goal):
 	bfs_search = BFS(graph, start, goal)
@@ -220,14 +262,19 @@ def beam_search(graph, start, goal, beam_width):
 ## This function takes in a graph and a list of node names, and returns
 ## the sum of edge lengths along the path -- the total distance in the path.
 def path_length(graph, node_names):
-    raise NotImplementedError
+	edge_lengths = 0
+	for index, value in enumerate(node_names):
+		if index + 1 < len(node_names):
+			edge_lengths += graph.get_edge(value, node_names[index + 1]).length
+	return edge_lengths
 
 
 def branch_and_bound(graph, start, goal):
-    raise NotImplementedError
+	branch_and_bound_search = BranchAndBound(graph, start, goal)
+	return branch_and_bound_search.search()
 
 def a_star(graph, start, goal):
-    raise NotImplementedError
+	raise NotImplementedError
 
 
 ## It's useful to determine if a graph has a consistent and admissible
@@ -236,10 +283,10 @@ def a_star(graph, start, goal):
 ## consistent, but not admissible?
 
 def is_admissible(graph, goal):
-    raise NotImplementedError
+	raise NotImplementedError
 
 def is_consistent(graph, goal):
-    raise NotImplementedError
+	raise NotImplementedError
 
 HOW_MANY_HOURS_THIS_PSET_TOOK = ''
 WHAT_I_FOUND_INTERESTING = ''
