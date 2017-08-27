@@ -325,7 +325,18 @@ def is_admissible(graph, goal):
 
 
 def is_consistent(graph, goal):
-	raise NotImplementedError
+	consistent = True
+	for node in graph.nodes:
+		heuristic = graph.get_heuristic(node, goal)
+		connected_nodes = graph.get_connected_nodes(node)
+		for connected_node in connected_nodes:
+			connected_distance = graph.get_edge(node, connected_node).length
+			connected_heuristic = graph.get_heuristic(connected_node, goal)
+			if connected_distance + connected_heuristic < heuristic:
+				consistent = False
+				break
+	return consistent
+
 
 HOW_MANY_HOURS_THIS_PSET_TOOK = '20'
 WHAT_I_FOUND_INTERESTING = 'In the beginning it seems really pedantic, but by A* I felt its real world applications.'
