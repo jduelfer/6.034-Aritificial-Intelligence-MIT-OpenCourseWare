@@ -122,17 +122,7 @@ class HillClimbing(Search):
 				ordered_nodes.append(ordered.node)
 			self.agenda = ordered_nodes + self.agenda
 
-class LayerBasedSearch(Search):
-	"""Layer-based searches are those that depend upon fitlering
-	of a certain layer of our agenda before going throught he next
-	pop in the agenda. The filtering is done based on heuristics or edges."""
-
-	def __init__(self, graph, start, goal):
-		Search.__init__(self, graph, start, goal)
-		self.layer_by_node = dict()
-		self.nodes_by_layer = dict()
-		self.is_filtered_by_layer = dict()
-
+class OptimalSearch(Search):
 
 	def search(self):
 		while len(self.agenda) > 0:
@@ -152,6 +142,32 @@ class LayerBasedSearch(Search):
 			if self.validate_possible_extensions(connected_node):
 				nodes_to_add.append(connected_node)
 				self.parent[connected_node] = node
+		if nodes_to_add:
+			self.agenda += nodes_to_add
+
+	def filter_agenda(self):
+		node_to_pop = self.agenda[0]
+		unordered_wrapped_nodes = self.get_unordered_wrapped_nodes()
+		append_nodes_to_agenda = self.append_nodes_to_agenda(unordered_wrapped_nodes)
+
+
+class BeamSearch(OptimalSearch):
+	"""Although it inherits from Optimal search, almost all of its functions
+	are independent because they are based upon saved layers and beam widths."""
+
+	def __init__(self, graph, start, goal, beam_width):
+		Search.__init__(self, graph, start, goal)
+		self.beam_width = beam_width
+		self.layer_by_node = dict()
+		self.nodes_by_layer = dict()
+		self.is_filtered_by_layer = dict()
+
+	def add_to_agenda(self, node, connected_nodes):
+		nodes_to_add = []
+		for connected_node in connected_nodes:
+			if self.validate_possible_extensions(connected_node):
+				nodes_to_add.append(connected_node)
+				self.parent[connected_node] = node
 				if not self.layer_by_node.has_key(node):
 					self.layer_by_node[node] = 0
 					self.nodes_by_layer[0] = [node]
@@ -163,63 +179,71 @@ class LayerBasedSearch(Search):
 			self.agenda += nodes_to_add
 
 	def filter_agenda(self):
-		"""Empty function that should be implemented for searchs
-		that must filter agenda before popping the first element."""
-
-class BeamSearch(LayerBasedSearch):
-	def __init__(self, graph, start, goal, beam_width):
-		Search.__init__(self, graph, start, goal)
-		self.beam_width = beam_width
-		self.layer_by_node = dict()
-		self.nodes_by_layer = dict()
-		self.is_filtered_by_layer = dict()
-
-	def filter_agenda(self):
 		node_to_pop = self.agenda[0]
 		if self.layer_by_node.has_key(node_to_pop):
 			current_layer = self.layer_by_node[node_to_pop]
 			if not self.is_filtered_by_layer.has_key(current_layer):
-				unordered_node_heuristics = []
-				for node in self.agenda:
-					if node in self.nodes_by_layer[current_layer]:
-						heuristic = self.graph.get_heuristic(node, self.goal)
-						node_heuristic = NodeHeuristic(node, heuristic)
-						unordered_node_heuristics.append(node_heuristic)
-				end_of_reorder = len(unordered_node_heuristics)
-				if end_of_reorder > 0:
-					self.agenda = self.agenda[end_of_reorder:] # temp until we sort
-					ordered_node_heuristics = sorted(unordered_node_heuristics, key=lambda x: x.heuristic)
-					ordered_nodes = []
-					for index, value in enumerate(ordered_node_heuristics):
-						if index < self.beam_width:
-							ordered_nodes.append(value.node)
-					self.agenda = ordered_nodes + self.agenda # reinsert ordered layer
-				self.is_filtered_by_layer[current_layer] = True
+				unordered_wrapped_nodes = self.get_unordered_wrapped_nodes(current_layer)
+				append_nodes_to_agenda = self.append_nodes_to_agenda(unordered_wrapped_nodes, current_layer)
 
-class BranchAndBound(LayerBasedSearch):
+	def get_unordered_wrapped_nodes(self, current_layer):
+		unordered_node_heuristics = []
+		for node in self.agenda:
+			if node in self.nodes_by_layer[current_layer]:
+				heuristic = self.graph.get_heuristic(node, self.goal)
+				node_heuristic = NodeHeuristic(node, heuristic)
+				unordered_node_heuristics.append(node_heuristic)
+		return unordered_node_heuristics
 
-	def filter_agenda(self):
-		"""Run a for on each path by backtraceing on each element in the current
-		layer with the shortest edge path first."""
-		node_to_pop = self.agenda[0]
-		if self.layer_by_node.has_key(node_to_pop):
-			current_layer = self.layer_by_node[node_to_pop]
-			if not self.is_filtered_by_layer.has_key(current_layer):
-				unordered_node_edges = []
-				for node in self.agenda:
-					if node in self.nodes_by_layer[current_layer]:
-						edge_lengths = path_length(self.graph, self.backtrace(node))
-						node_edge = NodeEdge(node, edge_lengths)
-						unordered_node_edges.append(node_edge)
-				end_of_reorder = len(unordered_node_edges)
-				if end_of_reorder > 0:
-					self.agenda = self.agenda[end_of_reorder:]
-					ordered_node_edges = sorted(unordered_node_edges, key=lambda x: x.edges_length)
-					ordered_nodes = []
-					for index, value in enumerate(ordered_node_edges):
-						ordered_nodes.append(value.node)
-					self.agenda = ordered_nodes + self.agenda
-				self.is_filtered_by_layer[current_layer] = True
+	def append_nodes_to_agenda(self, unordered_wrapped_nodes, current_layer):
+		end_of_reorder = len(unordered_wrapped_nodes)
+		if end_of_reorder > 0:
+			self.agenda = self.agenda[end_of_reorder:] # temp until we sort
+			ordered_node_heuristics = sorted(unordered_wrapped_nodes, key=lambda x: x.heuristic)
+			ordered_nodes = []
+			for index, value in enumerate(ordered_node_heuristics):
+				if index < self.beam_width:
+					ordered_nodes.append(value.node)
+			self.agenda = ordered_nodes + self.agenda # reinsert ordered layer
+		self.is_filtered_by_layer[current_layer] = True
+
+class BranchAndBound(OptimalSearch):
+
+	def get_unordered_wrapped_nodes(self):
+		unordered_node_edges = []
+		for node in self.agenda:
+			edge_lengths = path_length(self.graph, self.backtrace(node))
+			node_edge = NodeEdge(node, edge_lengths)
+			unordered_node_edges.append(node_edge)
+		return unordered_node_edges
+
+	def append_nodes_to_agenda(self, unordered_wrapped_nodes):
+		ordered_node_edges = sorted(unordered_wrapped_nodes, key=lambda x: x.edges_length)
+		ordered_nodes = []
+		for index, value in enumerate(ordered_node_edges):
+			ordered_nodes.append(value.node)
+		self.agenda = ordered_nodes
+
+class AStar(OptimalSearch):
+
+	def get_unordered_wrapped_nodes(self):
+		unordered_node_heruistic_edges = []
+		for node in self.agenda:
+			heuristic = self.graph.get_heuristic(node, self.goal)
+			edge_lengths = path_length(self.graph, self.backtrace(node))
+			node_heruistic_edge = NodeHeuristicEdge(node, heuristic, edge_lengths)
+			unordered_node_heruistic_edges.append(node_heruistic_edge)
+		return unordered_node_heruistic_edges
+
+	def append_nodes_to_agenda(self, unordered_wrapped_nodes):
+		"""After order the nodes in the agenda, remove any duplicated leaf
+		nodes based on the underestimate."""
+		ordered_node_edges = sorted(unordered_wrapped_nodes, key=lambda x: x.heuristic_edge)
+		ordered_nodes = []
+		for index, value in enumerate(ordered_node_edges):
+			ordered_nodes.append(value.node)
+		self.agenda = ordered_nodes
+
 
 class NodeHeuristic:
 	def __init__(self, node, heuristic):
@@ -230,6 +254,11 @@ class NodeEdge:
 	def __init__(self, node, edges_length):
 		self.node = node
 		self.edges_length = edges_length
+
+class NodeHeuristicEdge:
+	def __init__(self, node, heuristic, edges_length):
+		self.node = node
+		self.heuristic_edge = heuristic + edges_length
 
 def bfs(graph, start, goal):
 	bfs_search = BFS(graph, start, goal)
@@ -274,7 +303,8 @@ def branch_and_bound(graph, start, goal):
 	return branch_and_bound_search.search()
 
 def a_star(graph, start, goal):
-	raise NotImplementedError
+	a_star_search = AStar(graph, start, goal)
+	return a_star_search.search()
 
 
 ## It's useful to determine if a graph has a consistent and admissible
