@@ -150,7 +150,6 @@ class OptimalSearch(Search):
 		unordered_wrapped_nodes = self.get_unordered_wrapped_nodes()
 		append_nodes_to_agenda = self.append_nodes_to_agenda(unordered_wrapped_nodes)
 
-
 class BeamSearch(OptimalSearch):
 	"""Although it inherits from Optimal search, almost all of its functions
 	are independent because they are based upon saved layers and beam widths."""
@@ -244,7 +243,6 @@ class AStar(OptimalSearch):
 			ordered_nodes.append(value.node)
 		self.agenda = ordered_nodes
 
-
 class NodeHeuristic:
 	def __init__(self, node, heuristic):
 		self.node = node
@@ -313,11 +311,22 @@ def a_star(graph, start, goal):
 ## consistent, but not admissible?
 
 def is_admissible(graph, goal):
-	raise NotImplementedError
+	admissible = True
+	for node in graph.nodes:
+		if node != goal:
+			shortest_path = a_star(graph, node, goal)
+			heuristic = graph.get_heuristic(node, goal)
+			if heuristic == 0:
+				heuristic = graph.get_heuristic(goal, node)
+			if heuristic > path_length(graph, shortest_path):
+				admissible = False
+				break
+	return admissible
+
 
 def is_consistent(graph, goal):
 	raise NotImplementedError
 
-HOW_MANY_HOURS_THIS_PSET_TOOK = ''
-WHAT_I_FOUND_INTERESTING = ''
-WHAT_I_FOUND_BORING = ''
+HOW_MANY_HOURS_THIS_PSET_TOOK = '20'
+WHAT_I_FOUND_INTERESTING = 'In the beginning it seems really pedantic, but by A* I felt its real world applications.'
+WHAT_I_FOUND_BORING = 'I didn\t love BeamSearch.'
